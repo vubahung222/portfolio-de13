@@ -1,0 +1,12 @@
+# Secrets & local config
+.env
+
+# Generated TLS certs (regenerate with nginx/gen-certs.sh)
+nginx/certs/*.key
+nginx/certs/*.crt
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
+app/data/*.db

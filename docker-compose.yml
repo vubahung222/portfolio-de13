@@ -1,0 +1,109 @@
+services:
+  # ---------------------------------------------------------
+  #  MySQL Database
+  # ---------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    container_name: portfolio_mysql
+    restart: unless-stopped
+    command:
+      - --default-authentication-plugin=mysql_native_password
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_EXPORTER_USER: ${MYSQL_EXPORTER_USER}
+      MYSQL_EXPORTER_PASSWORD: ${MYSQL_EXPORTER_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./db/02-create-exporter-user.sh:/docker-entrypoint-initdb.d/02-create-exporter-user.sh:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt:
+      - no-new-privileges:true
+
+  # ---------------------------------------------------------
+  #  phpMyAdmin (DB management tool)
+  # ---------------------------------------------------------
+  phpmyadmin:
+    image: phpmyadmin:5.2
+    container_name: portfolio_phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      UPLOAD_LIMIT: 64M
+      PMA_ABSOLUTE_URI: https://localhost/pma/
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - backend
+      - frontend
+    security_opt:
+      - no-new-privileges:true
+
+  # ---------------------------------------------------------
+  #  PHP-FPM Application (portfolio + admin)
+  # ---------------------------------------------------------
+  app:
+    build:
+      context: ./app
+    container_name: portfolio_app
+    restart: unless-stopped
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${MYSQL_DATABASE}
+      DB_USER: ${MYSQL_USER}
+      DB_PASS: ${MYSQL_PASSWORD}
+    volumes:
+      - ./app/public:/var/www/html/public:ro
+      - ./app/src:/var/www/html/src:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - backend
+    security_opt:
+      - no-new-privileges:true
+
+  # ---------------------------------------------------------
+  #  Nginx reverse proxy (HTTPS + security headers)
+  # ---------------------------------------------------------
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: portfolio_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+      - ./app/public:/var/www/html/public:ro
+    depends_on:
+      - app
+      - phpmyadmin
+    networks:
+      - frontend
+      - backend
+    security_opt:
+      - no-new-privileges:true
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
+    internal: true
+
+volumes:
+  mysql_data:
