@@ -9,4 +9,4 @@ nginx/certs/*.crt
 .DS_Store
 Thumbs.db
 *.log
-app/data/*.db
+app/data/
